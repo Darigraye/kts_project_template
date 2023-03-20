@@ -5,9 +5,10 @@ from aiohttp.web import (
     View as AiohttpView,
     Request as AiohttpRequest,
 )
+
 # from pyparsing import Optional
 
-#from kts_backend import __appname__, __version__
+# from kts_backend import __appname__, __version__
 from kts_backend.store import setup_store, Store
 from kts_backend.store.database import Database
 from .config import setup_config, Config
@@ -16,7 +17,7 @@ from .mw import setup_middlewares
 from .urls import register_urls
 
 
-#__all__ = ("Application", )
+# __all__ = ("Application", )
 
 
 class Application(AiohttpApplication):

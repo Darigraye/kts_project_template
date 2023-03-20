@@ -10,7 +10,7 @@ from kts_backend.store.database import db
 
 
 class PlayerModel(db):
-    __tablename__ = 'player'
+    __tablename__ = "player"
 
     id = Column(Integer, primary_key=True)
     profile_id = Column(Integer, unique=True, nullable=False)

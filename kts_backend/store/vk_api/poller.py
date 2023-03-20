@@ -8,7 +8,7 @@ from aio_pika.abc import AbstractIncomingMessage
 
 from aio_pika import connect, Message
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 from kts_backend.web.app import app
 from kts_backend.store import Store
@@ -23,9 +23,9 @@ class Poller:
         self.rabbit_channel = None
 
     async def start(self):
-    #    self.poll_task = create_task(self.poll())
+        #    self.poll_task = create_task(self.poll())
         self.is_running = True
-        self.rabbit_connect = await connect('amqp://guest:guest@localhost/')
+        self.rabbit_connect = await connect("amqp://guest:guest@localhost/")
         await self.poll()
 
     async def stop(self):
@@ -51,13 +51,15 @@ class Poller:
                 "task_queue_2",
                 durable=True,
             )
-            await self.rabbit_channel.default_exchange.publish(message, routing_key='task_queue_2')
+            await self.rabbit_channel.default_exchange.publish(
+                message, routing_key="task_queue_2"
+            )
 
         # while self.is_running:
         #     updates = await self.store.vk_api.poll()
         #     await self.bot_manager.handle_updates(updates)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     poller = Poller(app.store)
     run(poller.start())

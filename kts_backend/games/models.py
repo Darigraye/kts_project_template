@@ -15,16 +15,20 @@ from kts_backend.users.models import PlayerModel
 
 
 class GameScoreModel(db):
-    __tablename__ = 'game_score'
+    __tablename__ = "game_score"
 
-    game_id = Column(Integer, ForeignKey('game.id', ondelete='CASCADE'), primary_key=True)
-    player_id = Column(Integer, ForeignKey('player.id', ondelete='CASCADE'), primary_key=True)
+    game_id = Column(
+        Integer, ForeignKey("game.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_id = Column(
+        Integer, ForeignKey("player.id", ondelete="CASCADE"), primary_key=True
+    )
     scores = Column(Integer, nullable=False)
     player: Mapped["PlayerModel"] = relationship()
 
 
 class GameModel(db):
-    __tablename__ = 'game'
+    __tablename__ = "game"
 
     id = Column(Integer, primary_key=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

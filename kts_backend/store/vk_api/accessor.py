@@ -27,17 +27,23 @@ class VkApiAccessor(BaseAccessor):
 
     async def connect(self, app: "Application"):
         async with ClientSession(connector=TCPConnector(ssl=False)) as session:
-            request_link = build_query(host='api.vk.com',
-                                       method='/method/groups.getLongPollServer',
-                                       params={'group_id': self.app.config.bot.group_id,
-                                               'access_token': self.app.config.bot.token})
+            request_link = build_query(
+                host="api.vk.com",
+                method="/method/groups.getLongPollServer",
+                params={
+                    "group_id": self.app.config.bot.group_id,
+                    "access_token": self.app.config.bot.token,
+                },
+            )
             async with session.get(request_link) as long_poll_response:
-                response = (await long_poll_response.json())['response']
-                self.server = response['server']
-                self.key = response['key']
-                self.ts = response['ts']
+                response = (await long_poll_response.json())["response"]
+                self.server = response["server"]
+                self.key = response["key"]
+                self.ts = response["ts"]
                 self.session = session
-                self.rabbit_session = await connect('amqp://guest:guest@localhost/')
+                self.rabbit_session = await connect(
+                    "amqp://guest:guest@localhost/"
+                )
                 self.is_running = True
 
                 async with self.rabbit_session:
@@ -48,10 +54,12 @@ class VkApiAccessor(BaseAccessor):
         await self.session.close()
 
     async def poll(self):
-        request_link = f'{self.server}?act=a_check&key={self.key}&ts={self.ts}&wait=25'
+        request_link = (
+            f"{self.server}?act=a_check&key={self.key}&ts={self.ts}&wait=25"
+        )
         async with self.session.get(request_link) as poll_response:
             response = await poll_response.json()
-            self.ts = response['ts']
+            self.ts = response["ts"]
 
         channel = await self.rabbit_session.channel()
 
@@ -60,24 +68,33 @@ class VkApiAccessor(BaseAccessor):
             durable=True,
         )
 
-        message_body = json.dumps(response['updates'])
+        message_body = json.dumps(response["updates"])
         await channel.default_exchange.publish(
-            PikaMes(message_body.encode(), delivery_mode=DeliveryMode.PERSISTENT), routing_key="task_queue_1",
+            PikaMes(
+                message_body.encode(), delivery_mode=DeliveryMode.PERSISTENT
+            ),
+            routing_key="task_queue_1",
         )
 
     async def get_chat_information(self, chat_id: int) -> list[User]:
-        request_link = build_query(host='api.vk.com',
-                                   method='/method/messages.getConversationMembers',
-                                   params={
-                                       'access_token': self.app.config.bot.token,
-                                       'peer_id': chat_id + 2000000000
-                                   }
-                                   )
+        request_link = build_query(
+            host="api.vk.com",
+            method="/method/messages.getConversationMembers",
+            params={
+                "access_token": self.app.config.bot.token,
+                "peer_id": chat_id + 2000000000,
+            },
+        )
         async with self.session.get(request_link) as poll_response:
             response = await poll_response.json()
 
-        users = [User(profile_id=user['id'],
-                      name=user['first_name'],
-                      last_name=user['last_name']) for user in response['profiles']]
+        users = [
+            User(
+                profile_id=user["id"],
+                name=user["first_name"],
+                last_name=user["last_name"],
+            )
+            for user in response["profiles"]
+        ]
 
         return users

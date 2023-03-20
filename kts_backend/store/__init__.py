@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class Store:
-    def __init__(self, app: "Application",  *args, **kwargs):
+    def __init__(self, app: "Application", *args, **kwargs):
         from kts_backend.users.accessor import UserAccessor
         from kts_backend.store.vk_api.accessor import VkApiAccessor
         from kts_backend.games.accessor import GameAccessor

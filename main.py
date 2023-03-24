@@ -3,7 +3,8 @@ import os
 from kts_backend.web.app import setup_app
 from aiohttp.web import run_app
 
-if __name__ == "__main__":
+
+def main():
     run_app(
         setup_app(
             config_path=os.path.join(

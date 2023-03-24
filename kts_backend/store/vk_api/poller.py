@@ -60,6 +60,6 @@ class Poller:
         #     await self.bot_manager.handle_updates(updates)
 
 
-if __name__ == "__main__":
+def run_poller():
     poller = Poller(app.store)
     run(poller.start())

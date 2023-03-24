@@ -64,6 +64,6 @@ class Sender:
                 await session.post(request_link)
 
 
-if __name__ == "__main__":
+def run_sender():
     sender = Sender()
     asyncio.run(sender.start())

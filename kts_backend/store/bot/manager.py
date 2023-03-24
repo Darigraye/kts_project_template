@@ -59,6 +59,6 @@ class BotManager:
                     )
 
 
-if __name__ == "__main__":
+def run_manager():
     bot = BotManager(app)
     asyncio.run(bot.start())

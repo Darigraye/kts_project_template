@@ -84,7 +84,7 @@ class BotManager:
         if payload == "start_but":
             if await cls.ready_to_start(update):
                 cls.state_machine[chat_id]["game_tree"] = GameTree(list(cls.state_machine[chat_id][
-                                                                       "id_participants"].values()))
+                                                                            "id_participants"].values()))
                 await cls.state_machine[chat_id]["game_tree"].start()
                 cls.state_machine[chat_id]["state"] = "started"
 
@@ -94,10 +94,18 @@ class BotManager:
             if payload == "first_but" or payload == "second_but":
                 await cls.state_machine[chat_id]["game_tree"].set_vote_for_current_pair(payload == "first_but")
 
-                return cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+        if payload == "next_but":
+            await cls.state_machine[chat_id]["game_tree"].next_pair()
+
+            photo_ids = cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+            if len(photo_ids) == 1:
+                cls.state_machine[chat_id]["state"] = "registration"
+                cls.state_machine[chat_id]["id_participants"].clear()
+                cls.state_machine[chat_id]["game_tree"] = None
+            return photo_ids
 
     @classmethod
-    def make_buttons(cls):
+    def make_keyboard_registered(cls):
         return {
             "one_time": False,
             "buttons":
@@ -109,20 +117,33 @@ class BotManager:
                                       color="secondary",
                                       payload="{\"button\": \"start_but\"}")
                      ],
+                    [cls.build_button(label="Следующий раунд",
+                                      color="positive",
+                                      payload="{\"button\": \"next_but\"}")
+                     ]
+                ]
+        }
 
-                    [cls.build_button(label="Первый",
+    @classmethod
+    def make_message_keyboard(cls):
+        return {
+            "inline": True,
+            "buttons":
+                [
+                    [cls.build_button(label="Левый",
                                       color="positive",
                                       payload="{\"button\": \"first_but\"}"),
-                     cls.build_button(label="Второй",
+                     cls.build_button(label="Правый",
                                       color="negative",
                                       payload="{\"button\": \"second_but\"}")
-                     ]
+                     ],
                 ]
         }
 
     async def handle_updates(self, message: AbstractIncomingMessage):
         async with message.process():
-            keyboard_body = self.make_buttons()
+            keyboard_body = self.make_keyboard_registered()
+            message_keyboard = self.make_message_keyboard()
             raw_data = json.loads(message.body.decode())
             for update in raw_data:
                 queue = await self.rabbit_channel.declare_queue(
@@ -134,11 +155,18 @@ class BotManager:
                         "user_id": update["object"]["user_id"],
                         "peer_id": update["object"]["peer_id"],
                         "keyboard": json.dumps(keyboard_body),
+                        "text": "hello"
                     }
                     photo_ids = await self.handle_state_in_chat(update)
 
-                    if photo_ids:
-                        new_message_body["photo_id"] = ("photo" + photo_ids[0], "photo" + photo_ids[1])
+                    if photo_ids is not None:
+                        if len(photo_ids) == 2:
+                            new_message_body["photo_id"] = ("photo" + photo_ids[0], "photo" + photo_ids[1])
+                            new_message_body["text"] = "Голосуем"
+                            new_message_body["keyboard"] = json.dumps(message_keyboard)
+                        elif len(photo_ids) == 1:
+                            new_message_body["photo_id"] = ("photo" + photo_ids[0])
+                            new_message_body["text"] = "ПОБЕДИТЕЛЬ!!!!"
 
                     await self.rabbit_channel.default_exchange.publish(
                         Message(

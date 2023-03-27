@@ -63,5 +63,8 @@ class GameTree:
 
     @property
     def photo_ids_current_pair(self):
-        return (self.rounds[self.current_round][0][0].photo_id,
-                self.rounds[self.current_round][0][1].photo_id)
+        if len(self.winner_nodes) == 1:
+            return (self.winner_nodes[0].photo_id, )
+        else:
+            return (self.rounds[self.current_round][0][0].photo_id,
+                    self.rounds[self.current_round][0][1].photo_id)

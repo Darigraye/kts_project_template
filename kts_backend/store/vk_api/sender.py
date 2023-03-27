@@ -55,12 +55,15 @@ class Sender:
                         "peer_id": raw_data["peer_id"],
                         "group_id": config.bot.group_id,
                         "access_token": config.bot.token,
-                        "message": "hello",  # TODO: учесть, что текста потом не будет (на кнопках)
+                        "message": raw_data["text"],  # TODO: учесть, что текста потом не будет (на кнопках)
                         "keyboard": raw_data["keyboard"],
                     }
-                attachment = raw_data.get("photo_id")
-                if attachment:
-                    params["attachment"] = attachment
+                attachments = raw_data.get("photo_id")
+                if attachments is not None:
+                    if len(attachments) == 2:
+                        params["attachment"] = ",".join(attachments)
+                    else:
+                        params["attachment"] = attachments
 
                 request_link = build_query(
                     host="api.vk.com",

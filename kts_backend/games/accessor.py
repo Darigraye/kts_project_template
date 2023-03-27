@@ -1,5 +1,8 @@
 from typing import Optional
 
+from aio_pika import connect
+from aio_pika.abc import AbstractConnection
+from aiohttp import ClientSession, TCPConnector
 from sqlalchemy import select, desc
 
 from kts_backend.base import BaseAccessor
@@ -7,6 +10,7 @@ from .models import GameModel, GameScoreModel
 from .game_dataclasses import Game, GameScore
 from kts_backend.users.models import PlayerModel
 from kts_backend.users.user_dataclasses import Player
+from ..web.utils import build_query
 
 
 class GameAccessor(BaseAccessor):
@@ -30,6 +34,23 @@ class GameAccessor(BaseAccessor):
         added_model = await self.get_latest_game_by_chat_id(chat_id=chat_id)
 
         return added_model
+
+    async def get_photo_id(self, users_id: int) -> list[dict[str, str]]:
+        async with ClientSession(connector=TCPConnector(ssl=False)) as session:
+            request_link = build_query(
+                host="api.vk.com",
+                method="/method/users.get",
+                params={
+                    "access_token": self.app.config.bot.token,
+                    "user_ids": users_id,
+                    "fields": "photo_id"
+                }
+            )
+
+            async with session.get(request_link) as poll_response:
+                response = await poll_response.json()
+
+        return response["response"][0].get("photo_id")
 
     async def get_latest_game_by_chat_id(self, chat_id: int) -> Optional[Game]:
         select_query = (

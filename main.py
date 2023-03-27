@@ -1,14 +1,14 @@
 import os
 
-from kts_backend.web.app import setup_app
+from kts_backend.web.app import application
 from aiohttp.web import run_app
 
 
 def main():
     run_app(
-        setup_app(
-            config_path=os.path.join(
-                os.path.dirname(__file__), "etc/config.yaml"
-            )
+        application
         )
-    )
+
+
+if __name__ == "__main__":
+    main()

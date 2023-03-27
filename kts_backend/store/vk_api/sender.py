@@ -38,7 +38,7 @@ class Sender:
     async def send_message(self, message: AbstractIncomingMessage):
         async with message.process():
             async with ClientSession(
-                connector=TCPConnector(ssl=False)
+                    connector=TCPConnector(ssl=False)
             ) as session:
                 raw_data = json.loads(message.body.decode())
                 config = config_from_yaml(
@@ -50,20 +50,31 @@ class Sender:
                         "etc/config.yaml",
                     )
                 )
-                request_link = build_query(
-                    host="api.vk.com",
-                    method="/method/messages.send",
-                    params={
+                params = {
                         "random_id": 0,
                         "peer_id": raw_data["peer_id"],
                         "group_id": config.bot.group_id,
-                        "message": raw_data["text"],
                         "access_token": config.bot.token,
-                    },
+                        "message": "hello",  # TODO: учесть, что текста потом не будет (на кнопках)
+                        "keyboard": raw_data["keyboard"],
+                    }
+                attachment = raw_data.get("photo_id")
+                if attachment:
+                    params["attachment"] = attachment
+
+                request_link = build_query(
+                    host="api.vk.com",
+                    method="/method/messages.send",
+                    params=params
                 )
+
                 await session.post(request_link)
 
 
 def run_sender():
     sender = Sender()
     asyncio.run(sender.start())
+
+
+if __name__ == "__main__":
+    run_sender()

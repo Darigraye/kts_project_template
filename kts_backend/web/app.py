@@ -1,3 +1,4 @@
+import os
 from typing import Sequence, Callable, Optional
 
 from aiohttp.web import (
@@ -34,3 +35,6 @@ def setup_app(config_path: str) -> Application:
     setup_middlewares(app)
     setup_store(app)
     return app
+
+
+application = setup_app(os.path.join(os.path.dirname(__file__), "..", "..", "etc/config.yaml"))

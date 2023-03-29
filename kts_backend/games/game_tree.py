@@ -3,6 +3,7 @@ import sys
 from typing import TYPE_CHECKING, Optional
 from math import log
 from random import randint
+import asyncio
 
 from aiohttp import ClientSession, TCPConnector
 
@@ -10,6 +11,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from kts_backend.web.utils import build_query
 from kts_backend.web.config import config_from_yaml
+from kts_backend.games.game_dataclasses import Game, GameScore
+from kts_backend.web.app import application
 
 
 class PhotoNode:
@@ -44,6 +47,7 @@ class GameTree:
             current_pair[1].number_votes += 1
 
     async def next_pair(self):
+        await asyncio.sleep(15)
         if self.rounds[self.current_round]:
             pair = self.rounds[self.current_round].pop(0)
             if pair[0].number_votes > pair[1].number_votes:

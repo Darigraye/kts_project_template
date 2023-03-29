@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import sys
+from time import time
 
 from math import log
 from asyncio import Future
@@ -13,13 +14,13 @@ from aiohttp import ClientSession, TCPConnector
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 from kts_backend.web.config import config_from_yaml
-from kts_backend.web.utils import build_query
+from kts_backend.web.utils import build_query, Timer
 from kts_backend.games.game_tree import GameTree
 from kts_backend.web.app import application, Application
 
 
 class BotManager:
-    state_machine: dict[int, dict[str, Optional[str | dict[int, str] | GameTree]]] = {}
+    state_machine: dict[int, dict[str, Optional[str | dict[int, str] | GameTree | int]]] = {}
     app: Application = application
 
     def __init__(self):
@@ -52,14 +53,20 @@ class BotManager:
         }
 
     @classmethod
-    async def registration_user(cls, update):
+    async def registration_user(cls, update) -> str:
         chat_id = update["object"]["peer_id"]
         user_id = update["object"]["user_id"]
 
         photo_id = await cls.app.store.game.get_photo_id(user_id)
 
-        if user_id not in cls.state_machine[chat_id]["id_participants"] and photo_id is not None:
-            cls.state_machine[chat_id]["id_participants"][user_id] = photo_id
+        if user_id in cls.state_machine[chat_id]["id_participants"]:
+            return "Вы уже зарегистрированы"
+
+        if photo_id is None:
+            return "Добавьте аватарку"
+
+        cls.state_machine[chat_id]["id_participants"][user_id] = photo_id
+        return "Вы успешно зарегистрированы"
 
     @classmethod
     async def ready_to_start(cls, update) -> bool:
@@ -71,38 +78,61 @@ class BotManager:
                cls.state_machine[chat_id]["state"] == "registration"
 
     @classmethod
-    async def handle_state_in_chat(cls, update) -> Optional[tuple[str, str]]:
+    async def handle_state_in_chat(cls, update) -> dict[str, Optional[tuple[str, str] | str]]:
         payload = update["object"]["payload"]["button"]
         chat_id = update["object"]["peer_id"]
+        user_id = update["object"]["user_id"]
+
+        event_text = "Ничего не произошло"
+        photo_ids = None
 
         if chat_id not in cls.state_machine:
-            cls.state_machine[chat_id] = {"state": "registration", "id_participants": {}, "game_tree": None}
+            cls.state_machine[chat_id] = {"state": "registration",
+                                          "id_participants": {},
+                                          "game_tree": None,
+                                          "timer": None,
+                                          }
 
         if payload == "reg_but":
-            await cls.registration_user(update)
+            event_text = await cls.registration_user(update)
 
         if payload == "start_but":
+            if user_id not in cls.state_machine[chat_id]["id_participants"]:
+                event_text = "Вы не зарегистрированы на игру!"
+
             if await cls.ready_to_start(update):
                 cls.state_machine[chat_id]["game_tree"] = GameTree(list(cls.state_machine[chat_id][
                                                                             "id_participants"].values()))
                 await cls.state_machine[chat_id]["game_tree"].start()
                 cls.state_machine[chat_id]["state"] = "started"
 
-                return cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+                event_text = "Вы начали игру!"
+                photo_ids = cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+            else:
+                event_text = "Новую игру начать нельзя (недостаточное количество игроков / игра уже начата)"
 
         if cls.state_machine[chat_id]["state"] == "started":
             if payload == "first_but" or payload == "second_but":
                 await cls.state_machine[chat_id]["game_tree"].set_vote_for_current_pair(payload == "first_but")
 
-        if payload == "next_but":
-            await cls.state_machine[chat_id]["game_tree"].next_pair()
+                event_text = "Вы проголосовали"
 
-            photo_ids = cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
-            if len(photo_ids) == 1:
-                cls.state_machine[chat_id]["state"] = "registration"
-                cls.state_machine[chat_id]["id_participants"].clear()
-                cls.state_machine[chat_id]["game_tree"] = None
-            return photo_ids
+        if payload == "next_but":
+            if user_id not in cls.state_machine[chat_id]["id_participants"]:
+                event_text = "Вы не зарегистрированы на игру!"
+
+            if cls.state_machine[chat_id]["state"] == "started":
+                await cls.state_machine[chat_id]["game_tree"].next_pair()
+
+                photo_ids = cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+                if len(photo_ids) == 1:
+                    cls.state_machine[chat_id]["state"] = "registration"
+                    cls.state_machine[chat_id]["id_participants"].clear()
+                    cls.state_machine[chat_id]["game_tree"] = None
+                event_text = "Вы решили, что нам нужно двигаться к следующей паре"
+            else:
+                event_text = "Игра не начата"
+        return {"event_text": event_text, "photo_ids": photo_ids}
 
     @classmethod
     def make_keyboard_registered(cls):
@@ -142,9 +172,8 @@ class BotManager:
 
     async def handle_updates(self, message: AbstractIncomingMessage):
         async with message.process():
-            keyboard_body = self.make_keyboard_registered()
-            message_keyboard = self.make_message_keyboard()
             raw_data = json.loads(message.body.decode())
+            keyboard_body = self.make_keyboard_registered()
             for update in raw_data:
                 queue = await self.rabbit_channel.declare_queue(
                     "task_queue_3",
@@ -155,12 +184,17 @@ class BotManager:
                         "user_id": update["object"]["user_id"],
                         "peer_id": update["object"]["peer_id"],
                         "keyboard": json.dumps(keyboard_body),
-                        "text": "hello"
+                        "text": "hello",
+                        "event_id": update["object"]["event_id"],
                     }
-                    photo_ids = await self.handle_state_in_chat(update)
+                    handle_res = await self.handle_state_in_chat(update)
+
+                    photo_ids = handle_res.get("photo_ids")
+                    new_message_body["event_text"] = handle_res["event_text"]
 
                     if photo_ids is not None:
                         if len(photo_ids) == 2:
+                            message_keyboard = self.make_message_keyboard()
                             new_message_body["photo_id"] = ("photo" + photo_ids[0], "photo" + photo_ids[1])
                             new_message_body["text"] = "Голосуем"
                             new_message_body["keyboard"] = json.dumps(message_keyboard)

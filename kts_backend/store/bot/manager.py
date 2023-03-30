@@ -16,6 +16,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 from kts_backend.web.config import config_from_yaml
 from kts_backend.web.utils import build_query, Timer
 from kts_backend.games.game_tree import GameTree
+from kts_backend.games.game_dataclasses import Game, GameScore
+from kts_backend.users.user_dataclasses import Player, GameScore
 from kts_backend.web.app import application, Application
 
 
@@ -103,6 +105,11 @@ class BotManager:
             if await cls.ready_to_start(update):
                 cls.state_machine[chat_id]["game_tree"] = GameTree(list(cls.state_machine[chat_id][
                                                                             "id_participants"].values()))
+                players = [Player(profile_id=id_participant,
+                                  name="Test name",
+                                  last_name="Test last name",
+                                  score=GameScore(scores=0)) for id_participant in cls.state_machine[chat_id]["id_participants"]]
+                await cls.app.store.game.add_new_game(chat_id=chat_id, players=players)
                 await cls.state_machine[chat_id]["game_tree"].start()
                 cls.state_machine[chat_id]["state"] = "started"
 

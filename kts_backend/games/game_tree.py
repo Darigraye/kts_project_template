@@ -5,14 +5,11 @@ from math import log
 from random import randint
 import asyncio
 
-from aiohttp import ClientSession, TCPConnector
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-from kts_backend.web.utils import build_query
-from kts_backend.web.config import config_from_yaml
-from kts_backend.games.game_dataclasses import Game, GameScore
-from kts_backend.web.app import application
+# from aiohttp import ClientSession, TCPConnector
+#
+# from kts_backend.web.utils import build_query
+# from kts_backend.web.config import config_from_yaml
+# from kts_backend.games.game_dataclasses import Game, GameScore
 
 
 class PhotoNode:
@@ -46,18 +43,21 @@ class GameTree:
         else:
             current_pair[1].number_votes += 1
 
-    async def next_pair(self):
-        await asyncio.sleep(15)
+    async def next_pair(self) -> Optional[PhotoNode]:
+        winner = None
         if self.rounds[self.current_round]:
             pair = self.rounds[self.current_round].pop(0)
             if pair[0].number_votes > pair[1].number_votes:
-                self.winner_nodes.append(pair[0])
+                winner = pair[0]
             elif pair[0].number_votes < pair[1].number_votes:
-                self.winner_nodes.append(pair[1])
+                winner = pair[1]
             else:
-                self.winner_nodes.append(pair[randint(0, 1)])
+                winner = pair[randint(0, 1)]
+            self.winner_nodes.append(winner)
         else:
             await self.next_round()
+
+        return winner
 
     async def next_round(self):
         self.current_round += 1

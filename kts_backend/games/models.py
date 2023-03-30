@@ -24,7 +24,7 @@ class GameScoreModel(db):
         Integer, ForeignKey("player.id", ondelete="CASCADE"), primary_key=True
     )
     scores = Column(Integer, nullable=False)
-    player: Mapped["PlayerModel"] = relationship()
+    player: Mapped["PlayerModel"] = relationship(lazy="selectin")
 
 
 class GameModel(db):
@@ -33,4 +33,4 @@ class GameModel(db):
     id = Column(Integer, primary_key=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     chat_id = Column(Integer, nullable=False)
-    players: Mapped[List[GameScoreModel]] = relationship()
+    players: Mapped[List[GameScoreModel]] = relationship(lazy="selectin")

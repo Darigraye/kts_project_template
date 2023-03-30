@@ -18,18 +18,21 @@ from kts_backend.web.utils import build_query, Timer
 from kts_backend.games.game_tree import GameTree
 from kts_backend.games.game_dataclasses import Game, GameScore
 from kts_backend.users.user_dataclasses import Player, GameScore
-from kts_backend.web.app import application, Application
+
+if TYPE_CHECKING:
+    from kts_backend.web.app import Application
 
 
 class BotManager:
     state_machine: dict[int, dict[str, Optional[str | dict[int, str] | GameTree | int]]] = {}
-    app: Application = application
 
-    def __init__(self):
+    def __init__(self, app: "Application"):
+        self.app = app
+        app.on_startup.append(self.start)
         self.rabbit_connect = None
         self.rabbit_channel = None
 
-    async def start(self):
+    async def start(self, *args, **kwargs):
         self.rabbit_connect = await connect("amqp://guest:guest@localhost/")
         async with self.rabbit_connect:
             self.rabbit_channel = await self.rabbit_connect.channel()
@@ -54,20 +57,19 @@ class BotManager:
             "color": color
         }
 
-    @classmethod
-    async def registration_user(cls, update) -> str:
+    async def registration_user(self, update) -> str:
         chat_id = update["object"]["peer_id"]
         user_id = update["object"]["user_id"]
 
-        photo_id = await cls.app.store.game.get_photo_id(user_id)
+        photo_id = await self.app.store.game.get_photo_id(user_id)
 
-        if user_id in cls.state_machine[chat_id]["id_participants"]:
+        if user_id in self.state_machine[chat_id]["id_participants"]:
             return "Вы уже зарегистрированы"
 
         if photo_id is None:
             return "Добавьте аватарку"
 
-        cls.state_machine[chat_id]["id_participants"][user_id] = photo_id
+        self.state_machine[chat_id]["id_participants"][user_id] = photo_id
         return "Вы успешно зарегистрированы"
 
     @classmethod
@@ -79,67 +81,84 @@ class BotManager:
                log(number_participants, 2).is_integer() and \
                cls.state_machine[chat_id]["state"] == "registration"
 
-    @classmethod
-    async def handle_state_in_chat(cls, update) -> dict[str, Optional[tuple[str, str] | str]]:
+    async def handle_state_in_chat(self, update) -> dict[str, Optional[tuple[str, str] | str]]:
         payload = update["object"]["payload"]["button"]
         chat_id = update["object"]["peer_id"]
         user_id = update["object"]["user_id"]
 
         event_text = "Ничего не произошло"
         photo_ids = None
+        info_text = None
 
-        if chat_id not in cls.state_machine:
-            cls.state_machine[chat_id] = {"state": "registration",
-                                          "id_participants": {},
-                                          "game_tree": None,
-                                          "timer": None,
-                                          }
+        if chat_id not in self.state_machine:
+            self.state_machine[chat_id] = {"state": "registration",
+                                           "id_participants": {},
+                                           "game_tree": None,
+                                           "timer": None,
+                                           }
 
         if payload == "reg_but":
-            event_text = await cls.registration_user(update)
+            event_text = await self.registration_user(update)
 
         if payload == "start_but":
-            if user_id not in cls.state_machine[chat_id]["id_participants"]:
+            if user_id not in self.state_machine[chat_id]["id_participants"]:
                 event_text = "Вы не зарегистрированы на игру!"
 
-            if await cls.ready_to_start(update):
-                cls.state_machine[chat_id]["game_tree"] = GameTree(list(cls.state_machine[chat_id][
-                                                                            "id_participants"].values()))
+            if await self.ready_to_start(update):
+                self.state_machine[chat_id]["game_tree"] = GameTree(list(self.state_machine[chat_id][
+                                                                             "id_participants"].values()))
                 players = [Player(profile_id=id_participant,
                                   name="Test name",
                                   last_name="Test last name",
-                                  score=GameScore(scores=0)) for id_participant in cls.state_machine[chat_id]["id_participants"]]
-                await cls.app.store.game.add_new_game(chat_id=chat_id, players=players)
-                await cls.state_machine[chat_id]["game_tree"].start()
-                cls.state_machine[chat_id]["state"] = "started"
+                                  score=GameScore(scores=0)) for id_participant in
+                           self.state_machine[chat_id]["id_participants"]]
+                await self.app.store.game.add_new_game(chat_id=chat_id, players=players)
+                await self.state_machine[chat_id]["game_tree"].start()
+                self.state_machine[chat_id]["state"] = "started"
 
                 event_text = "Вы начали игру!"
-                photo_ids = cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+                photo_ids = self.state_machine[chat_id]["game_tree"].photo_ids_current_pair
             else:
                 event_text = "Новую игру начать нельзя (недостаточное количество игроков / игра уже начата)"
 
-        if cls.state_machine[chat_id]["state"] == "started":
+        if self.state_machine[chat_id]["state"] == "started":
             if payload == "first_but" or payload == "second_but":
-                await cls.state_machine[chat_id]["game_tree"].set_vote_for_current_pair(payload == "first_but")
+                await self.state_machine[chat_id]["game_tree"].set_vote_for_current_pair(payload == "first_but")
 
                 event_text = "Вы проголосовали"
 
         if payload == "next_but":
-            if user_id not in cls.state_machine[chat_id]["id_participants"]:
+            if user_id not in self.state_machine[chat_id]["id_participants"]:
                 event_text = "Вы не зарегистрированы на игру!"
 
-            if cls.state_machine[chat_id]["state"] == "started":
-                await cls.state_machine[chat_id]["game_tree"].next_pair()
+            if self.state_machine[chat_id]["state"] == "started":
+                await self.state_machine[chat_id]["game_tree"].next_pair()
 
-                photo_ids = cls.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+                photo_ids = self.state_machine[chat_id]["game_tree"].photo_ids_current_pair
                 if len(photo_ids) == 1:
-                    cls.state_machine[chat_id]["state"] = "registration"
-                    cls.state_machine[chat_id]["id_participants"].clear()
-                    cls.state_machine[chat_id]["game_tree"] = None
+                    self.state_machine[chat_id]["state"] = "registration"
+                    self.state_machine[chat_id]["id_participants"].clear()
+                    self.state_machine[chat_id]["game_tree"] = None
                 event_text = "Вы решили, что нам нужно двигаться к следующей паре"
             else:
                 event_text = "Игра не начата"
-        return {"event_text": event_text, "photo_ids": photo_ids}
+
+        if payload == "info_but":
+            game = await self.app.store.game.get_latest_game_by_chat_id(chat_id)
+
+            if game is None:
+                info_text = "Ни одной игры ещё не было сыграно!"
+            else:
+                if self.state_machine[chat_id]["state"] == "started":
+                    info_text = f"Информация о текущей игре: дата и время начала - {game.created_at}"
+                else:
+                    info_text = f"Инфмормация о последней сыгранной игре: %0A дата и время начала - {game.created_at} %0A"
+                players_info = "Информация об игроках: %0A "
+                for player in game.players:
+                    players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
+                                    f"очков: {player.score.scores} %0A"
+                info_text += players_info
+        return {"event_text": event_text, "photo_ids": photo_ids, "info_text": info_text}
 
     @classmethod
     def make_keyboard_registered(cls):
@@ -157,7 +176,12 @@ class BotManager:
                     [cls.build_button(label="Следующий раунд",
                                       color="positive",
                                       payload="{\"button\": \"next_but\"}")
-                     ]
+                     ],
+                    [cls.build_button(label="Информация об игре",
+                                      color="primary",
+                                      payload="{\"button\": \"info_but\"}")
+
+                    ]
                 ]
         }
 
@@ -197,7 +221,13 @@ class BotManager:
                     handle_res = await self.handle_state_in_chat(update)
 
                     photo_ids = handle_res.get("photo_ids")
-                    new_message_body["event_text"] = handle_res["event_text"]
+                    info_text = handle_res.get("info_text")
+
+                    if handle_res.get("event_text"):
+                        new_message_body["event_text"] = handle_res["event_text"]
+
+                    if info_text:
+                        new_message_body["text"] = info_text
 
                     if photo_ids is not None:
                         if len(photo_ids) == 2:

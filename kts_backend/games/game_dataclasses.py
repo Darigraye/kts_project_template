@@ -14,7 +14,6 @@ class GameScore:
 
 @dataclass
 class Game:
-    id: int
     created_at: datetime
     chat_id: int
     players: list["Player"]

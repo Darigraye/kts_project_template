@@ -1,4 +1,7 @@
 import json
+import os
+import sys
+import asyncio
 from typing import TYPE_CHECKING, Optional
 
 from aiohttp.client import ClientSession
@@ -6,7 +9,9 @@ from aiohttp import TCPConnector
 from aio_pika import connect, Message as PikaMes
 from aio_pika.abc import AbstractIncomingMessage, DeliveryMode
 
-from kts_backend.base.base_accessor import BaseAccessor
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+from kts_backend.web.config import config_from_yaml
 from kts_backend.users.user_dataclasses import User
 from ...web.utils import build_query
 
@@ -14,25 +19,24 @@ if TYPE_CHECKING:
     from kts_backend.web.app import Application
 
 
-class VkApiAccessor(BaseAccessor):
-    def __init__(self, app: "Application", *args, **kwargs):
-        super().__init__(app, *args, **kwargs)
+class VkApiAccessor:
+    def __init__(self, config):
         self.session: Optional[ClientSession] = None
         self.key: Optional[str] = None
         self.server: Optional[str] = None
         self.ts: Optional[int] = None
         self.rabbit_session = None
-        self.app = app
+        self.config = config
         self.is_running: bool = False
 
-    async def connect(self, app: "Application"):
+    async def connect(self):
         async with ClientSession(connector=TCPConnector(ssl=False)) as session:
             request_link = build_query(
                 host="api.vk.com",
                 method="/method/groups.getLongPollServer",
                 params={
-                    "group_id": self.app.config.bot.group_id,
-                    "access_token": self.app.config.bot.token,
+                    "group_id": self.config.bot.group_id,
+                    "access_token": self.config.bot.token,
                 },
             )
             async with session.get(request_link) as long_poll_response:
@@ -50,7 +54,7 @@ class VkApiAccessor(BaseAccessor):
                     while self.is_running:
                         await self.poll()
 
-    async def disconnect(self, app: "Application"):
+    async def disconnect(self):
         await self.session.close()
 
     async def poll(self):
@@ -98,3 +102,20 @@ class VkApiAccessor(BaseAccessor):
         ]
 
         return users
+
+
+def run_vk_api():
+    vk_api = VkApiAccessor(config_from_yaml(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "etc/config.yaml",
+        )
+    ))
+    asyncio.run(vk_api.connect())
+
+
+if __name__ == "__main__":
+    run_vk_api()

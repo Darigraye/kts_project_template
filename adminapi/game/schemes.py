@@ -3,15 +3,23 @@ from marshmallow import Schema, fields
 from adminapi.web.schemes import OkResponseSchema
 
 
-class GameRequestSchema(Schema):
+class GameRequestChatIdSchema(Schema):
     chat_id = fields.Int()
+
+
+class GameRequestVkIdSchema(Schema):
+    profile_id = fields.Int()
+
+
+class ScoreSchema(Schema):
+    scores = fields.Int()
 
 
 class PlayerSchema(Schema):
     profile_id = fields.Int()
-    first_name = fields.Str()
+    first_name = fields.Str(attribute="name")
     last_name = fields.Str()
-    scores = fields.Int()
+    score = fields.Nested(ScoreSchema)
 
 
 class GameSchema(Schema):
@@ -27,3 +35,7 @@ class GameResponseSchema(OkResponseSchema):
 
 class ListGamesResponseSchema(Schema):
     data = fields.Nested(GameSchema, many=True)
+
+
+class DeleteResponseSchema(Schema):
+    data = fields.Str()

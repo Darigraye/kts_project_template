@@ -4,6 +4,7 @@ from aiohttp_session import new_session, get_session
 
 from adminapi.web.app import View
 from adminapi.admin.schemes import ResponseAdminSchema, RequestAdminSchema, AdminSchema
+from adminapi.web.mixins import AuthRequiredMixin
 from adminapi.web.utils import json_response
 
 

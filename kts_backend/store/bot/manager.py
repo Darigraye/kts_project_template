@@ -73,6 +73,97 @@ class BotManager:
         self.state_machine[chat_id]["id_participants"][user_id] = (photo_id, first_name, last_name)
         return res_text
 
+    async def handle_start_button(self, user_id, chat_id, update):
+        owners_name = []
+        photo_ids = []
+        if user_id not in self.state_machine[chat_id]["id_participants"]:
+            event_text = "Вы не зарегистрированы на игру!"
+
+        if await self.ready_to_start(update):
+            self.state_machine[chat_id]["game_tree"] = GameTree(list(self.state_machine[chat_id][
+                                                                         "id_participants"].values()))
+            players = [Player(profile_id=id_participant,
+                              name=info_participant[1],
+                              last_name=info_participant[2],
+                              score=GameScore(scores=0)) for id_participant, info_participant in
+                       self.state_machine[chat_id]["id_participants"].items()]
+            await self.app.store.game.add_new_game(chat_id=chat_id, players=players)
+            await self.state_machine[chat_id]["game_tree"].start()
+            self.state_machine[chat_id]["state"] = "started"
+
+            event_text = "Вы начали игру!"
+            cur_pair = self.state_machine[chat_id]["game_tree"].current_pair
+            photo_ids = [node.photo_id for node in cur_pair]
+            owners_name = [node.owner_name for node in cur_pair]
+        else:
+            event_text = "Новую игру начать нельзя (недостаточное количество игроков / игра уже начата)"
+
+        return event_text, owners_name, photo_ids
+
+    async def handle_next_button(self, user_id, chat_id):
+        owners_name = []
+        photo_ids = []
+        if user_id not in self.state_machine[chat_id]["id_participants"]:
+            event_text = "Вы не зарегистрированы на игру!"
+
+        if self.state_machine[chat_id]["state"] == "started":
+            winner = await self.state_machine[chat_id]["game_tree"].next_pair()
+            await self.app.store.game.update_user_score(vk_id=int(winner.owner_id),
+                                                        scores=winner.number_votes,
+                                                        chat_id=chat_id)
+
+            cur_pair = self.state_machine[chat_id]["game_tree"].current_pair
+            photo_ids = [node.photo_id for node in cur_pair]
+            owners_name = [node.owner_name for node in cur_pair]
+            if len(photo_ids) == 1:
+                self.state_machine[chat_id]["state"] = "registration"
+                self.state_machine[chat_id]["id_participants"].clear()
+                self.state_machine[chat_id]["game_tree"] = None
+            event_text = "Вы решили, что нам нужно двигаться к следующей паре"
+        else:
+            event_text = "Игра не начата"
+
+        return event_text, owners_name, photo_ids
+
+    async def handle_info_button(self, chat_id):
+        game = await self.app.store.game.get_latest_game_by_chat_id(chat_id)
+
+        if game is None:
+            info_text = "Ни одной игры ещё не было сыграно!"
+        else:
+            if self.state_machine[chat_id]["state"] == "started":
+                info_text = f"Информация о текущей игре: дата и время начала - {game.created_at}"
+            else:
+                info_text = f"Инфмормация о последней сыгранной игре: %0A дата и время начала - {game.created_at} %0A"
+            players_info = "Информация об игроках: %0A "
+            for player in game.players:
+                players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
+                                f"очков: {player.score.scores} %0A"
+            info_text += players_info
+
+        return info_text
+
+    async def handle_stop_button(self, chat_id):
+        info_text = None
+        event_text = None
+        if self.state_machine[chat_id]["state"] == "started":
+            self.state_machine[chat_id]["state"] = "registration"
+            self.state_machine[chat_id]["id_participants"].clear()
+            self.state_machine[chat_id]["game_tree"] = None
+            game = await self.app.store.game.get_latest_game_by_chat_id(chat_id)
+
+            info_text = "Игра была досрочно остановлена. Информация о завершённой игровой сессии: %0A"
+            info_text += f"Дата и время начала - {game.created_at} %0A"
+            players_info = "Информация об игроках: %0A "
+            for player in game.players:
+                players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
+                                f"очков: {player.score.scores} %0A"
+            info_text += players_info
+        else:
+            event_text = "Нет игр, которые можно было бы остановить"
+
+        return ("event", event_text) if event_text else ("info", info_text)
+
     @classmethod
     async def ready_to_start(cls, update) -> bool:
         chat_id = update["object"]["peer_id"]
@@ -101,89 +192,24 @@ class BotManager:
 
         if payload == "reg_but":
             event_text = await self.registration_user(update)
-
         if payload == "start_but":
-            if user_id not in self.state_machine[chat_id]["id_participants"]:
-                event_text = "Вы не зарегистрированы на игру!"
-
-            if await self.ready_to_start(update):
-                self.state_machine[chat_id]["game_tree"] = GameTree(list(self.state_machine[chat_id][
-                                                                             "id_participants"].values()))
-                players = [Player(profile_id=id_participant,
-                                  name=info_participant[1],
-                                  last_name=info_participant[2],
-                                  score=GameScore(scores=0)) for id_participant, info_participant in
-                           self.state_machine[chat_id]["id_participants"].items()]
-                await self.app.store.game.add_new_game(chat_id=chat_id, players=players)
-                await self.state_machine[chat_id]["game_tree"].start()
-                self.state_machine[chat_id]["state"] = "started"
-
-                event_text = "Вы начали игру!"
-                cur_pair = self.state_machine[chat_id]["game_tree"].current_pair
-                photo_ids = [node.photo_id for node in cur_pair]
-                owners_name = [node.owner_name for node in cur_pair]
-            else:
-                event_text = "Новую игру начать нельзя (недостаточное количество игроков / игра уже начата)"
-
+            event_text, owners_name, photo_ids = await self.handle_start_button(user_id, chat_id, update)
         if self.state_machine[chat_id]["state"] == "started":
             if payload == "first_but" or payload == "second_but":
                 await self.state_machine[chat_id]["game_tree"].set_vote_for_current_pair(payload == "first_but")
 
                 event_text = "Вы проголосовали"
-
         if payload == "next_but":
-            if user_id not in self.state_machine[chat_id]["id_participants"]:
-                event_text = "Вы не зарегистрированы на игру!"
-
-            if self.state_machine[chat_id]["state"] == "started":
-                winner = await self.state_machine[chat_id]["game_tree"].next_pair()
-                await self.app.store.game.update_user_score(vk_id=int(winner.owner_id),
-                                                            scores=winner.number_votes,
-                                                            chat_id=chat_id)
-
-                cur_pair = self.state_machine[chat_id]["game_tree"].current_pair
-                photo_ids = [node.photo_id for node in cur_pair]
-                owners_name = [node.owner_name for node in cur_pair]
-                if len(photo_ids) == 1:
-                    self.state_machine[chat_id]["state"] = "registration"
-                    self.state_machine[chat_id]["id_participants"].clear()
-                    self.state_machine[chat_id]["game_tree"] = None
-                event_text = "Вы решили, что нам нужно двигаться к следующей паре"
-            else:
-                event_text = "Игра не начата"
-
+            event_text, owners_name, photo_ids = await self.handle_next_button(user_id, chat_id)
         if payload == "info_but":
-            game = await self.app.store.game.get_latest_game_by_chat_id(chat_id)
-
-            if game is None:
-                info_text = "Ни одной игры ещё не было сыграно!"
-            else:
-                if self.state_machine[chat_id]["state"] == "started":
-                    info_text = f"Информация о текущей игре: дата и время начала - {game.created_at}"
-                else:
-                    info_text = f"Инфмормация о последней сыгранной игре: %0A дата и время начала - {game.created_at} %0A"
-                players_info = "Информация об игроках: %0A "
-                for player in game.players:
-                    players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
-                                    f"очков: {player.score.scores} %0A"
-                info_text += players_info
-
+            info_text = await self.handle_info_button(chat_id)
         if payload == "stop_but":
-            if self.state_machine[chat_id]["state"] == "started":
-                self.state_machine[chat_id]["state"] = "registration"
-                self.state_machine[chat_id]["id_participants"].clear()
-                self.state_machine[chat_id]["game_tree"] = None
-                game = await self.app.store.game.get_latest_game_by_chat_id(chat_id)
+            res = await self.handle_stop_button(chat_id)
 
-                info_text = "Игра была досрочно остановлена. Информация о незавершённой игровой сессии: %0A"
-                info_text += f"Дата и время начала - {game.created_at}"
-                players_info = "Информация об игроках: %0A "
-                for player in game.players:
-                    players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
-                                    f"очков: {player.score.scores} %0A"
-                info_text += players_info
+            if res[0] == "event":
+                event_text = res[1]
             else:
-                event_text = "Нет игр, которые можно было бы остановить"
+                info_text = res[1]
 
         return {"event_text": event_text,
                 "users": {"photo_ids": photo_ids, "names": owners_name},

@@ -33,7 +33,7 @@ class GameAccessor(BaseAccessor):
             session.add(model_game)
             await session.commit()
 
-    async def get_photo_id(self, users_id: int) -> list[dict[str, str]]:
+    async def get_photo_id(self, users_id: int) -> tuple[str, int]:
         async with ClientSession(connector=TCPConnector(ssl=False)) as session:
             request_link = build_query(
                 host="api.vk.com",
@@ -48,7 +48,9 @@ class GameAccessor(BaseAccessor):
             async with session.get(request_link) as poll_response:
                 response = await poll_response.json()
 
-        return response["response"][0].get("photo_id")
+        return response["response"][0].get("photo_id"), \
+               response["response"][0].get("first_name"), \
+                response["response"][0].get("last_name")
 
     async def get_all_games_by_chat_id(self, chat_id: int) -> Optional[Game]:
         select_query = (
@@ -94,7 +96,8 @@ class GameAccessor(BaseAccessor):
 
         wrapped_data: GameModel = res.scalar()
         if wrapped_data:
-            return Game(chat_id=chat_id,
+            return Game(id=wrapped_data.players[0].game_id,
+                        chat_id=chat_id,
                         created_at=wrapped_data.created_at,
                         players=[Player(profile_id=player.player.profile_id,
                                         name=player.player.name,

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class BotManager:
-    state_machine: dict[int, dict[str, Optional[str | dict[int, str] | GameTree | int]]] = {}
+    state_machine: dict[int, dict[str, Optional[str | dict[int, tuple[str, int]] | GameTree | int]]] = {}
 
     def __init__(self, app: "Application"):
         self.app = app
@@ -60,17 +60,18 @@ class BotManager:
     async def registration_user(self, update) -> str:
         chat_id = update["object"]["peer_id"]
         user_id = update["object"]["user_id"]
+        res_text = "Вы успешно зарегистрированы"
 
-        photo_id = await self.app.store.game.get_photo_id(user_id)
+        photo_id, first_name, last_name = await self.app.store.game.get_photo_id(user_id)
 
         if user_id in self.state_machine[chat_id]["id_participants"]:
-            return "Вы уже зарегистрированы"
+            res_text = "Вы уже зарегистрированы"
 
         if photo_id is None:
-            return "Добавьте аватарку"
+            res_text = "Добавьте аватарку"
 
-        self.state_machine[chat_id]["id_participants"][user_id] = photo_id
-        return "Вы успешно зарегистрированы"
+        self.state_machine[chat_id]["id_participants"][user_id] = (photo_id, first_name, last_name)
+        return res_text
 
     @classmethod
     async def ready_to_start(cls, update) -> bool:
@@ -89,6 +90,7 @@ class BotManager:
         event_text = "Ничего не произошло"
         photo_ids = None
         info_text = None
+        owners_name = []
 
         if chat_id not in self.state_machine:
             self.state_machine[chat_id] = {"state": "registration",
@@ -108,16 +110,18 @@ class BotManager:
                 self.state_machine[chat_id]["game_tree"] = GameTree(list(self.state_machine[chat_id][
                                                                              "id_participants"].values()))
                 players = [Player(profile_id=id_participant,
-                                  name="Test name",
-                                  last_name="Test last name",
-                                  score=GameScore(scores=0)) for id_participant in
-                           self.state_machine[chat_id]["id_participants"]]
+                                  name=info_participant[1],
+                                  last_name=info_participant[2],
+                                  score=GameScore(scores=0)) for id_participant, info_participant in
+                           self.state_machine[chat_id]["id_participants"].items()]
                 await self.app.store.game.add_new_game(chat_id=chat_id, players=players)
                 await self.state_machine[chat_id]["game_tree"].start()
                 self.state_machine[chat_id]["state"] = "started"
 
                 event_text = "Вы начали игру!"
-                photo_ids = self.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+                cur_pair = self.state_machine[chat_id]["game_tree"].current_pair
+                photo_ids = [node.photo_id for node in cur_pair]
+                owners_name = [node.owner_name for node in cur_pair]
             else:
                 event_text = "Новую игру начать нельзя (недостаточное количество игроков / игра уже начата)"
 
@@ -132,9 +136,14 @@ class BotManager:
                 event_text = "Вы не зарегистрированы на игру!"
 
             if self.state_machine[chat_id]["state"] == "started":
-                await self.state_machine[chat_id]["game_tree"].next_pair()
+                winner = await self.state_machine[chat_id]["game_tree"].next_pair()
+                await self.app.store.game.update_user_score(vk_id=int(winner.owner_id),
+                                                            scores=winner.number_votes,
+                                                            chat_id=chat_id)
 
-                photo_ids = self.state_machine[chat_id]["game_tree"].photo_ids_current_pair
+                cur_pair = self.state_machine[chat_id]["game_tree"].current_pair
+                photo_ids = [node.photo_id for node in cur_pair]
+                owners_name = [node.owner_name for node in cur_pair]
                 if len(photo_ids) == 1:
                     self.state_machine[chat_id]["state"] = "registration"
                     self.state_machine[chat_id]["id_participants"].clear()
@@ -158,7 +167,9 @@ class BotManager:
                     players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
                                     f"очков: {player.score.scores} %0A"
                 info_text += players_info
-        return {"event_text": event_text, "photo_ids": photo_ids, "info_text": info_text}
+        return {"event_text": event_text,
+                "users": {"photo_ids": photo_ids, "names": owners_name},
+                "info_text": info_text}
 
     @classmethod
     def make_keyboard_registered(cls):
@@ -186,15 +197,15 @@ class BotManager:
         }
 
     @classmethod
-    def make_message_keyboard(cls):
+    def make_message_keyboard(cls, left, right):
         return {
             "inline": True,
             "buttons":
                 [
-                    [cls.build_button(label="Левый",
+                    [cls.build_button(label=left,
                                       color="positive",
                                       payload="{\"button\": \"first_but\"}"),
-                     cls.build_button(label="Правый",
+                     cls.build_button(label=right,
                                       color="negative",
                                       payload="{\"button\": \"second_but\"}")
                      ],
@@ -220,7 +231,7 @@ class BotManager:
                     }
                     handle_res = await self.handle_state_in_chat(update)
 
-                    photo_ids = handle_res.get("photo_ids")
+                    photo_ids = handle_res["users"].get("photo_ids")
                     info_text = handle_res.get("info_text")
 
                     if handle_res.get("event_text"):
@@ -231,7 +242,8 @@ class BotManager:
 
                     if photo_ids is not None:
                         if len(photo_ids) == 2:
-                            message_keyboard = self.make_message_keyboard()
+                            message_keyboard = self.make_message_keyboard(left=handle_res["users"]["names"][0],
+                                                                          right=handle_res["users"]["names"][1])
                             new_message_body["photo_id"] = ("photo" + photo_ids[0], "photo" + photo_ids[1])
                             new_message_body["text"] = "Голосуем"
                             new_message_body["keyboard"] = json.dumps(message_keyboard)

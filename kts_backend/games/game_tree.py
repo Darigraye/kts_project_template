@@ -13,27 +13,30 @@ import asyncio
 
 
 class PhotoNode:
-    def __init__(self, photo_id):
+    def __init__(self, photo_id, name, last_name):
         self.number_votes = 0
         self.photo_id = photo_id
         self.owner_id = photo_id.split("_")[0]
+        self.owner_name = name
+        self.owner_last_name = last_name
 
 
 class GameTree:
-    def __init__(self, list_user_photo_ids: list[str]):
-        self.list_user_photo_ids: list[str] = list_user_photo_ids
+    def __init__(self, list_user_info: list[tuple[str, int]]):
+        self.list_user_info: list[tuple[str, int]] = list_user_info
         self.current_round: Optional[int] = None
-        self.number_rounds: Optional[int] = int(log(len(list_user_photo_ids), 2))
+        self.number_rounds: Optional[int] = int(log(len(list_user_info), 2))
         self.rounds: Optional[dict[int, list[tuple[PhotoNode, PhotoNode]]]] = None
         self.winner_nodes: Optional[list[PhotoNode]] = None
 
     async def start(self):
         self.current_round = 0
-        self.number_rounds = int(log(len(self.list_user_photo_ids), 2))
+        self.number_rounds = int(log(len(self.list_user_info), 2))
         self.rounds: dict[int, list[tuple[PhotoNode, PhotoNode]]] = {
             number_round: [] for number_round in range(1, self.number_rounds + 1)
         }
-        self.winner_nodes: list[PhotoNode] = [PhotoNode(photo_id=photo_id) for photo_id in self.list_user_photo_ids]
+        self.winner_nodes: list[PhotoNode] = [PhotoNode(photo_id=info[0], name=info[1], last_name=info[2]) for info in
+                                              self.list_user_info]
         await self.next_round()
 
     async def set_vote_for_current_pair(self, first: bool):
@@ -66,9 +69,9 @@ class GameTree:
                                                     self.winner_nodes.pop(0)))
 
     @property
-    def photo_ids_current_pair(self):
+    def current_pair(self):
         if len(self.winner_nodes) == 1:
-            return (self.winner_nodes[0].photo_id, )
+            return (self.winner_nodes[0], )
         else:
-            return (self.rounds[self.current_round][0][0].photo_id,
-                    self.rounds[self.current_round][0][1].photo_id)
+            return (self.rounds[self.current_round][0][0],
+                    self.rounds[self.current_round][0][1])

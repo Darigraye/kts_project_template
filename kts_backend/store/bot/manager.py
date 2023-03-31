@@ -167,6 +167,24 @@ class BotManager:
                     players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
                                     f"очков: {player.score.scores} %0A"
                 info_text += players_info
+
+        if payload == "stop_but":
+            if self.state_machine[chat_id]["state"] == "started":
+                self.state_machine[chat_id]["state"] = "registration"
+                self.state_machine[chat_id]["id_participants"].clear()
+                self.state_machine[chat_id]["game_tree"] = None
+                game = await self.app.store.game.get_latest_game_by_chat_id(chat_id)
+
+                info_text = "Игра была досрочно остановлена. Информация о незавершённой игровой сессии: %0A"
+                info_text += f"Дата и время начала - {game.created_at}"
+                players_info = "Информация об игроках: %0A "
+                for player in game.players:
+                    players_info += f"%0AИмя: {player.name}, Фамилия: {player.last_name}, Количество набранных" \
+                                    f"очков: {player.score.scores} %0A"
+                info_text += players_info
+            else:
+                event_text = "Нет игр, которые можно было бы остановить"
+
         return {"event_text": event_text,
                 "users": {"photo_ids": photo_ids, "names": owners_name},
                 "info_text": info_text}
@@ -186,7 +204,10 @@ class BotManager:
                      ],
                     [cls.build_button(label="Следующий раунд",
                                       color="positive",
-                                      payload="{\"button\": \"next_but\"}")
+                                      payload="{\"button\": \"next_but\"}"),
+                     cls.build_button(label="Остановить игру",
+                                      color="negative",
+                                      payload="{\"button\": \"stop_but\"}")
                      ],
                     [cls.build_button(label="Информация об игре",
                                       color="primary",

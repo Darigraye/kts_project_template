@@ -12,7 +12,6 @@ from aio_pika import connect, Message
 from aio_pika.abc import AbstractIncomingMessage, DeliveryMode
 from aiohttp import ClientSession, TCPConnector
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 from kts_backend.web.config import config_from_yaml
 from kts_backend.web.utils import build_query, Timer
 from kts_backend.games.game_tree import GameTree
@@ -321,12 +320,3 @@ class BotManager:
                         ),
                         routing_key="task_queue_3",
                     )
-
-
-def run_manager():
-    bot = BotManager()
-    asyncio.run(bot.start())
-
-
-if __name__ == "__main__":
-    run_manager()

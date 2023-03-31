@@ -1,6 +1,7 @@
 import sys
 
 from main import main as run_app
+from adminapi_run import run_admin_api
 from kts_backend.store.vk_api.poller import run_poller
 from kts_backend.store.vk_api.sender import run_sender
 from kts_backend.store.vk_api.accessor import run_vk_api
@@ -10,7 +11,8 @@ FUNCTIONS_FOR_RUNNING = {
     'run_app': run_app,
     'run_poller': run_poller,
     'run_vk_api': run_vk_api,
-    'run_sender': run_sender
+    'run_sender': run_sender,
+    'run_admin': run_admin_api
                          }
 
 

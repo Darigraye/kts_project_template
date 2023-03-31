@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from kts_backend.store.database import db
+from adminapi.store.database import AdminModel
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -1,3 +1,6 @@
+session:
+  key: CaY5iCkYtN7DqXdiYK1BvmGrQuaSA4Tl4bEk9my0jc0=
+
 debug: true
 web:
   host: 127.0.0.1

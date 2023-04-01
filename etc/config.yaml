@@ -1,10 +1,21 @@
+session:
+  key: CaY5iCkYtN7DqXdiYK1BvmGrQuaSA4Tl4bEk9my0jc0=
+
 debug: true
 web:
   host: 127.0.0.1
   port: 8000
-
 sentry:
   dsn:
   env: dev
 
+bot:
+  token: vk1.a.M6jvREM2RME36rXfLkrGioczg1Uf7XUVcC6bEBrKepbb8gvUoir-8kYCBYLshVIJj6x_xS4G6b_8hV7OvZcuQwnBJgwNwgBaH72sFOD3uvvm39tkfQ4sLpeP2uP_8h0L84XZLiiKVNQlKdEQwrrsa0ukdXddpt6MzOos-o9oiu48AZPqp1pL2Awbamr_dWKybv_d_cCsg-DpAG4yXUDECg
+  group_id: 219408141
+database:
+  host: 0.0.0.0
+  port: 5432
+  user: kts_user
+  password: kts_pass
+  database: kts
 store: {}

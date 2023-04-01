@@ -38,7 +38,7 @@ class Sender:
     async def send_message(self, message: AbstractIncomingMessage):
         async with message.process():
             async with ClientSession(
-                connector=TCPConnector(ssl=False)
+                    connector=TCPConnector(ssl=False)
             ) as session:
                 raw_data = json.loads(message.body.decode())
                 config = config_from_yaml(
@@ -50,20 +50,53 @@ class Sender:
                         "etc/config.yaml",
                     )
                 )
+
+                if event_id := raw_data.get("event_id"):
+                    params = {
+                        "access_token": config.bot.token,
+                        "event_id": event_id,
+                        "user_id": raw_data["user_id"],
+                        "peer_id": raw_data["peer_id"]
+                    }
+                    if raw_data.get("event_text"):
+                        params["event_data"] = json.dumps({"type": "show_snackbar",
+                                                           "text": raw_data["event_text"]})
+
+                    request_link = build_query(
+                        host="api.vk.com",
+                        method="/method/messages.sendMessageEventAnswer",
+                        params=params
+                    )
+
+                    await session.post(request_link)
+
+                params = {
+                    "random_id": 0,
+                    "peer_id": raw_data["peer_id"],
+                    "group_id": config.bot.group_id,
+                    "access_token": config.bot.token,
+                    "message": raw_data["text"],  # TODO: учесть, что текста потом не будет (на кнопках)
+                    "keyboard": raw_data["keyboard"],
+                }
+                attachments = raw_data.get("photo_id")
+                if attachments is not None:
+                    if len(attachments) == 2:
+                        params["attachment"] = ",".join(attachments)
+                    else:
+                        params["attachment"] = attachments
+
                 request_link = build_query(
                     host="api.vk.com",
                     method="/method/messages.send",
-                    params={
-                        "random_id": 0,
-                        "peer_id": raw_data["peer_id"],
-                        "group_id": config.bot.group_id,
-                        "message": raw_data["text"],
-                        "access_token": config.bot.token,
-                    },
+                    params=params
                 )
                 await session.post(request_link)
 
 
-if __name__ == "__main__":
+def run_sender():
     sender = Sender()
     asyncio.run(sender.start())
+
+
+if __name__ == "__main__":
+    run_sender()

@@ -1,7 +1,10 @@
-from typing import Optional
+import asyncio
+import json
+import uuid
+from typing import Optional, MutableMapping
 
-from aio_pika import connect
-from aio_pika.abc import AbstractConnection
+from aio_pika import connect, Message
+from aio_pika.abc import AbstractConnection, AbstractIncomingMessage
 from aiohttp import ClientSession, TCPConnector
 from sqlalchemy import select, desc, update, and_
 
@@ -14,6 +17,10 @@ from ..web.utils import build_query
 
 
 class GameAccessor(BaseAccessor):
+    def __init__(self, app, *args, **kwargs):
+        super().__init__(app, *args, **kwargs)
+        self.futures: MutableMapping[str, asyncio.Future] = {}
+
     async def add_new_game(
             self, chat_id: int, players: list[Player]
     ) -> Optional[Game]:
@@ -33,24 +40,56 @@ class GameAccessor(BaseAccessor):
             session.add(model_game)
             await session.commit()
 
-    async def get_photo_id(self, users_id: int) -> tuple[str, int]:
-        async with ClientSession(connector=TCPConnector(ssl=False)) as session:
-            request_link = build_query(
-                host="api.vk.com",
-                method="/method/users.get",
-                params={
-                    "access_token": self.app.config.bot.token,
-                    "user_ids": users_id,
-                    "fields": "photo_id"
-                }
-            )
+    async def get_photo_id(self, user_id: int) -> tuple[str, int]:
+        loop = asyncio.get_running_loop()
+        connection = await connect(
+            "amqp://guest:guest@localhost/", loop=loop,
+        )
+        channel = await connection.channel()
+        callback_queue = await channel.declare_queue(exclusive=True)
+        await callback_queue.consume(self.on_response, no_ack=True)
 
-            async with session.get(request_link) as poll_response:
-                response = await poll_response.json()
+        correlation_id = str(uuid.uuid4())
+        future = loop.create_future()
 
-        return response["response"][0].get("photo_id"), \
-               response["response"][0].get("first_name"), \
-                response["response"][0].get("last_name")
+        self.futures[correlation_id] = future
+
+        await channel.default_exchange.publish(
+            Message(
+                str(user_id).encode(),
+                content_type="text/plain",
+                correlation_id=correlation_id,
+                reply_to=callback_queue.name,
+            ),
+            routing_key="rpc_queue",
+        )
+        res: bytes = await future
+        res = res.decode()
+        res = json.loads(res)
+        return res
+
+    async def on_response(self, message: AbstractIncomingMessage) -> None:
+        assert message.correlation_id is not None
+        future: asyncio.Future = self.futures.pop(message.correlation_id)
+        future.set_result(message.body)
+    # async def get_photo_id(self, users_id: int) -> tuple[str, int]:
+    #     async with ClientSession(connector=TCPConnector(ssl=False)) as session:
+    #         request_link = build_query(
+    #             host="api.vk.com",
+    #             method="/method/users.get",
+    #             params={
+    #                 "access_token": self.app.config.bot.token,
+    #                 "user_ids": users_id,
+    #                 "fields": "photo_id"
+    #             }
+    #         )
+    #
+    #         async with session.get(request_link) as poll_response:
+    #             response = await poll_response.json()
+    #
+    #     return response["response"][0].get("photo_id"), \
+    #            response["response"][0].get("first_name"), \
+    #             response["response"][0].get("last_name")
 
     async def get_all_games_by_chat_id(self, chat_id: int) -> Optional[Game]:
         select_query = (

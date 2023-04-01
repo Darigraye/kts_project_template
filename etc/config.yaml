@@ -1,3 +1,6 @@
+session:
+  key: CaY5iCkYtN7DqXdiYK1BvmGrQuaSA4Tl4bEk9my0jc0=
+
 debug: true
 web:
   host: 127.0.0.1
@@ -7,7 +10,7 @@ sentry:
   env: dev
 
 bot:
-  token: vk1.a.Kvi2Zn8E-GJBvlbuIlMMbHxbmgH3jIHgMTM8HZbeZbeB04E01x0fue65maZSD0hD57ZEotET6apRD4c_EqZUe7V66BPOYkHpJFwmEJ7mqvk9xUUyT_cagyjO09IyGeMZPOMv051SGks_1u9LOXrEaergU-j_3lGV-4e6aiC24Jt-ehaR3euzhKyr-8pSovhlree81JX1nwub88reiIYrmg
+  token: vk1.a.M6jvREM2RME36rXfLkrGioczg1Uf7XUVcC6bEBrKepbb8gvUoir-8kYCBYLshVIJj6x_xS4G6b_8hV7OvZcuQwnBJgwNwgBaH72sFOD3uvvm39tkfQ4sLpeP2uP_8h0L84XZLiiKVNQlKdEQwrrsa0ukdXddpt6MzOos-o9oiu48AZPqp1pL2Awbamr_dWKybv_d_cCsg-DpAG4yXUDECg
   group_id: 219408141
 database:
   host: 0.0.0.0

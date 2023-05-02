@@ -1,0 +1,4 @@
+FROM postgres
+ENV POSTGRES_USER kts_user
+ENV POSTGRES_PASSWORD kts_pass
+ENV POSTGRES_DB kts
